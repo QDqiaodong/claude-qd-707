@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.marina.berth.common.BizException;
 import com.marina.berth.domain.Berthing;
 import com.marina.berth.domain.MarinaDict;
+import com.marina.berth.domain.NavigationClosureOrder;
 import com.marina.berth.domain.SailingPlan;
 import com.marina.berth.domain.Vessel;
 import com.marina.berth.dto.SailingPlanDtos;
@@ -46,6 +47,7 @@ public class SailingPlanService {
     private final VesselRepository vesselRepository;
     private final BerthingRepository berthingRepository;
     private final BerthingService berthingService;
+    private final ClosureService closureService;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -53,11 +55,13 @@ public class SailingPlanService {
     public SailingPlanService(SailingPlanRepository planRepository,
                               VesselRepository vesselRepository,
                               BerthingRepository berthingRepository,
-                              BerthingService berthingService) {
+                              BerthingService berthingService,
+                              @org.springframework.context.annotation.Lazy ClosureService closureService) {
         this.planRepository = planRepository;
         this.vesselRepository = vesselRepository;
         this.berthingRepository = berthingRepository;
         this.berthingService = berthingService;
+        this.closureService = closureService;
     }
 
     @Transactional(readOnly = true)
@@ -116,7 +120,13 @@ public class SailingPlanService {
         plan.setWeather(req.weather().trim());
         plan.setStatus("PENDING");
         plan.setUpdatedAt(LocalDateTime.now());
-        return toView(planRepository.save(plan));
+        SailingPlan savedPlan = planRepository.save(plan);
+
+        // 封航生效中/解除中：申报可以保存为待审批，但在封航令归档前不得批准 —— 补一条影响台账留痕
+        closureService.currentBlockingOrder().ifPresent(order ->
+                closureService.recordBlockedNewPlan(savedPlan, order));
+
+        return toView(savedPlan);
     }
 
     /** 审批通过：放行出海（仍占泊位则先自动结算离泊） */
@@ -124,8 +134,19 @@ public class SailingPlanService {
     public Views.SailingPlanView approve(Long planId) {
         SailingPlan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new BizException("申报单不存在：id=" + planId));
+        if ("SUSPENDED".equals(plan.getStatus())) {
+            throw new BizException("申报 " + plan.getPlanNo() + " 已因封航暂停放行，不能直接批准；"
+                    + "请等待封航令归档后，按原审批顺序在出航申报页继续审批");
+        }
         if (!"PENDING".equals(plan.getStatus())) {
             throw new BizException("只有待审批的申报可以批准，当前状态：" + MarinaDict.planStatusName(plan.getStatus()));
+        }
+        // 封航生效中/解除中：待审批也一律拦下（可以保存，但不得被批准）
+        NavigationClosureOrder blocking = closureService.currentBlockingOrder().orElse(null);
+        if (blocking != null) {
+            throw new BizException("封航令 " + blocking.getOrderNo() + " 正在「"
+                    + MarinaDict.closureStatusName(blocking.getStatus()) + "」，新的出航申报暂不得批准，"
+                    + "已为你保留为待审批，封航归档后可继续审批");
         }
         Vessel vessel = plan.getVessel();
         if ("MAINTENANCE".equals(vessel.getStatus())) {
@@ -162,8 +183,19 @@ public class SailingPlanService {
     public Views.SailingPlanView markReturn(Long planId) {
         SailingPlan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new BizException("申报单不存在：id=" + planId));
+        if ("SUSPENDED".equals(plan.getStatus())) {
+            throw new BizException("申报 " + plan.getPlanNo() + " 已被封航暂停放行，不能直接登记返航；"
+                    + "解除归档后按原审批顺序处理");
+        }
         if (!"APPROVED".equals(plan.getStatus())) {
             throw new BizException("只有已批准的申报可以登记返航，当前状态：" + MarinaDict.planStatusName(plan.getStatus()));
+        }
+        // 封航期间在海船只的返航必须走「封航处置台 → 安全靠泊」，由那里把
+        // 处置项/船只/申报/靠泊记录/泊位在一笔事务里改齐，禁止从这里绕过单独改申报
+        NavigationClosureOrder blocking = closureService.currentBlockingOrder().orElse(null);
+        if (blocking != null && "OUT_SEA".equals(plan.getVessel().getStatus())) {
+            throw new BizException("封航令 " + blocking.getOrderNo() + " 生效期间，该船为受管控在海船只，"
+                    + "请在「封航返港处置台」完成联系确认与安全靠泊，系统会一并把申报改为已返航");
         }
         plan.setStatus("RETURNED");
         plan.setUpdatedAt(LocalDateTime.now());
@@ -180,6 +212,10 @@ public class SailingPlanService {
     public Views.SailingPlanView cancel(Long planId) {
         SailingPlan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new BizException("申报单不存在：id=" + planId));
+        if ("SUSPENDED".equals(plan.getStatus())) {
+            throw new BizException("申报 " + plan.getPlanNo() + " 已被封航暂停放行，不能直接改成取消；"
+                    + "封航归档后会恢复为可继续审批，届时再按流程取消");
+        }
         if (!"PENDING".equals(plan.getStatus()) && !"APPROVED".equals(plan.getStatus())) {
             throw new BizException("已返航或已取消的申报不能再取消，当前状态：" + MarinaDict.planStatusName(plan.getStatus()));
         }
@@ -202,6 +238,11 @@ public class SailingPlanService {
         if ("APPROVED".equals(plan.getStatus()) && plan.getEtaReturn().isBefore(LocalDateTime.now())) {
             overdueHours = Duration.between(plan.getEtaReturn(), LocalDateTime.now()).toHours();
         }
+        String holdOrderNo = null;
+        if (plan.getHoldByOrder() != null) {
+            // 封航令是 LAZY 关联，toView 本身在事务里读，直接取编号即可；游离实例先判 id
+            holdOrderNo = plan.getHoldByOrder().getOrderNo();
+        }
         return new Views.SailingPlanView(
                 plan.getId(),
                 plan.getPlanNo(),
@@ -220,6 +261,10 @@ public class SailingPlanService {
                 plan.getStatus(),
                 MarinaDict.planStatusName(plan.getStatus()),
                 overdueHours,
+                plan.getHoldByOrder() == null ? null : plan.getHoldByOrder().getId(),
+                holdOrderNo,
+                plan.getHoldSeq(),
+                plan.getHoldReason(),
                 plan.getUpdatedAt());
     }
 

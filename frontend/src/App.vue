@@ -22,6 +22,9 @@
         <div class="stat-chip" :class="{ 'is-alert': (overview.planOverdue || 0) > 0 }">
           <b>{{ overview.planOverdue || 0 }}</b><span>超期未返</span>
         </div>
+        <div class="stat-chip" :class="{ 'is-closure': (overview.closureActive || 0) > 0 }">
+          <b>{{ overview.closureActive || 0 }}</b><span>封航令</span>
+        </div>
         <div class="stat-chip" :class="{ 'is-warn': (overview.serviceUnsettled || 0) > 0 }">
           <b>{{ overview.serviceUnsettled || 0 }}</b><span>未结费用</span>
         </div>

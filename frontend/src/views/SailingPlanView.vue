@@ -28,9 +28,12 @@
         <el-table-column prop="route" label="目的地/航线" min-width="150" />
         <el-table-column prop="crewCount" label="载员" width="70" />
         <el-table-column prop="weather" label="海况天气预报" min-width="180" />
-        <el-table-column prop="statusName" label="状态" width="100">
+        <el-table-column prop="statusName" label="状态" width="110">
           <template #default="{ row }">
             <el-tag size="small" :type="statusTag(row.status)">{{ row.statusName }}</el-tag>
+            <div v-if="row.status === 'SUSPENDED'" class="muted" style="font-size:11px">
+              {{ row.holdOrderNo }} · 顺序 #{{ row.holdSeq }}
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="超期" width="110">
@@ -40,16 +43,32 @@
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'PENDING'" type="primary" size="small" link @click="act(row, 'approve')">审批</el-button>
-            <el-button v-if="row.status === 'APPROVED'" type="success" size="small" link @click="act(row, 'return')">登记返航</el-button>
-            <el-button v-if="row.status === 'PENDING' || row.status === 'APPROVED'" type="danger" size="small" link
-                       @click="act(row, 'cancel')">取消</el-button>
-            <span v-if="row.status === 'RETURNED' || row.status === 'CANCELED'" class="muted">已结单</span>
+            <template v-if="row.status === 'SUSPENDED'">
+              <el-tooltip content="封航期间暂停放行，归档后按原顺序恢复审批，不能直接取消或返航" placement="top">
+                <el-tag size="small" type="danger">封航暂停中</el-tag>
+              </el-tooltip>
+              <el-button style="margin-left:6px" size="small" link type="primary"
+                         @click="goClosure">前往封航台</el-button>
+            </template>
+            <template v-else>
+              <el-button v-if="row.status === 'PENDING'" type="primary" size="small" link @click="act(row, 'approve')">审批</el-button>
+              <el-button v-if="row.status === 'APPROVED'" type="success" size="small" link @click="act(row, 'return')">登记返航</el-button>
+              <el-button v-if="row.status === 'PENDING' || row.status === 'APPROVED'" type="danger" size="small" link
+                         @click="act(row, 'cancel')">取消</el-button>
+              <span v-if="row.status === 'RETURNED' || row.status === 'CANCELED'" class="muted">已结单</span>
+            </template>
           </template>
         </el-table-column>
       </el-table>
+
+      <el-alert v-if="closureActive" type="error" :closable="false" show-icon style="margin-top:10px"
+                :title="`封航令 ${closureActive.orderNo} 正在「${closureActive.statusName}」：新申报可保存为待审批但不能批准；已批准未出航的申报已暂停放行。`">
+        <template #default>
+          <el-button type="primary" size="small" @click="goClosure">进入封航与返港处置台</el-button>
+        </template>
+      </el-alert>
     </div>
 
     <el-dialog v-model="createVisible" title="新建出航申报" width="560px">
@@ -82,22 +101,30 @@
 
 <script setup>
 import { inject, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { planApi, vesselApi } from '../api'
+import { planApi, vesselApi, closureApi } from '../api'
 
 const PLAN_STATUS = [
   { value: 'PENDING', label: '待审批' },
   { value: 'APPROVED', label: '已批准' },
+  { value: 'SUSPENDED', label: '暂停放行' },
   { value: 'RETURNED', label: '已返航' },
   { value: 'CANCELED', label: '已取消' }
 ]
 
+const router = useRouter()
 const marina = inject('marina', null)
 const plans = ref([])
 const vessels = ref([])
+const closureActive = ref(null)
 const statusFilter = ref('')
 const createVisible = ref(false)
 const form = ref({})
+
+function goClosure() {
+  router.push('/closures')
+}
 
 function fmtTime(row, column, value) {
   if (!value) return '—'
@@ -105,7 +132,7 @@ function fmtTime(row, column, value) {
 }
 
 function statusTag(status) {
-  return { PENDING: 'warning', APPROVED: 'primary', RETURNED: 'success', CANCELED: 'info' }[status] || 'info'
+  return { PENDING: 'warning', APPROVED: 'primary', SUSPENDED: 'danger', RETURNED: 'success', CANCELED: 'info' }[status] || 'info'
 }
 
 /** 超期未返：整行标红 */
@@ -114,8 +141,14 @@ function rowClass({ row }) {
 }
 
 async function load() {
-  plans.value = await planApi.list(statusFilter.value ? { status: statusFilter.value } : {})
-  vessels.value = await vesselApi.list()
+  const [list, vesselList, active] = await Promise.all([
+    planApi.list(statusFilter.value ? { status: statusFilter.value } : {}),
+    vesselApi.list(),
+    closureApi.list(false)
+  ])
+  plans.value = list
+  vessels.value = vesselList
+  closureActive.value = active.find((o) => o.status === 'EFFECTIVE' || o.status === 'RELEASING') || null
 }
 
 function openCreate() {

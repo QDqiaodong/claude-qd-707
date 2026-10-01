@@ -74,3 +74,15 @@ export const serviceApi = {
   create: (data) => http.post('/service-records', data),
   settle: (id, settleStatus) => http.post(`/service-records/${id}/settle`, { settleStatus })
 }
+
+/** 模块六：封航与返港处置台 */
+export const closureApi = {
+  list: (includeArchived) => http.get('/closures', { params: includeArchived ? { includeArchived: true } : {} }),
+  detail: (id) => http.get(`/closures/${id}`),
+  create: (data) => http.post('/closures', data),
+  activate: (id, operator) => http.post(`/closures/${id}/activate`, { operator }),
+  release: (id, data) => http.post(`/closures/${id}/release`, data || {}),
+  archive: (id, operator) => http.post(`/closures/${id}/archive`, { operator }),
+  contact: (id, data) => http.post(`/closures/dispositions/${id}/contact`, data),
+  safeBerth: (id, data) => http.post(`/closures/dispositions/${id}/safe-berth`, data)
+}

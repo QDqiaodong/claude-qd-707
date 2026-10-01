@@ -109,6 +109,10 @@ public final class Views {
             String status,
             String statusName,
             Long overdueHours,
+            Long holdByOrderId,
+            String holdOrderNo,
+            Integer holdSeq,
+            String holdReason,
             LocalDateTime updatedAt) {
     }
 
@@ -167,6 +171,161 @@ public final class Views {
             Long serviceUnsettled,
             BigDecimal serviceUnsettledAmount,
             BigDecimal monthServiceAmount,
-            Long insuranceWarn) {
+            Long insuranceWarn,
+            Long closureActive) {
+    }
+
+    // ======================== 模块六：封航与返港 ========================
+
+    /** 封航令列表项（带处置项计数，列表上直接看风险是否清零） */
+    public record ClosureOrderView(
+            Long id,
+            String orderNo,
+            String reasonType,
+            String reasonTypeName,
+            String title,
+            String description,
+            String issuedBy,
+            String status,
+            String statusName,
+            LocalDateTime effectiveAt,
+            LocalDateTime activatedAt,
+            LocalDateTime releasedAt,
+            LocalDateTime archivedAt,
+            String archivedBy,
+            String releaseRemark,
+            Long dispositionTotal,
+            Long riskCount,
+            Long toContactCount,
+            Long confirmedCount,
+            Long lostCount,
+            Long berthedCount,
+            Long suspendedPlanCount,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt) {
+    }
+
+    /** 受影响出航申报（处置台「受影响申报」页签，读影响台账 + 申报实时状态） */
+    public record AffectedPlanView(
+            Long effectId,
+            String effectType,
+            String effectTypeName,
+            String planStatusSnap,
+            Integer holdSeq,
+            String effectRemark,
+            LocalDateTime effectCreatedAt,
+            String effectOperator,
+            Long planId,
+            String planNo,
+            Long vesselId,
+            String vesselName,
+            String vesselTypeName,
+            String planStatus,
+            String planStatusName,
+            LocalDateTime departTime,
+            LocalDateTime etaReturn,
+            String skipper,
+            String phone,
+            String route,
+            Long overdueHours,
+            Integer currentHoldSeq,
+            String currentHoldReason) {
+    }
+
+    /** 返港处置项（含每次联系记录） */
+    public record DispositionView(
+            Long id,
+            Long closureOrderId,
+            Long vesselId,
+            String vesselName,
+            String vesselType,
+            String vesselTypeName,
+            Long planId,
+            String planNo,
+            String status,
+            String statusName,
+            boolean risk,
+            Long plannedBerthId,
+            String plannedBerthNo,
+            LocalDateTime contactedAt,
+            LocalDateTime confirmedAt,
+            LocalDateTime escalatedAt,
+            LocalDateTime berthedAt,
+            Long berthId,
+            String berthNo,
+            Long berthingId,
+            String berthingNo,
+            LocalDateTime createdAt,
+            List<ContactView> contacts) {
+    }
+
+    /** 单次联系记录 */
+    public record ContactView(
+            Long id,
+            LocalDateTime contactTime,
+            String result,
+            String resultName,
+            String remark,
+            String operator,
+            boolean idempotentReplay,
+            LocalDateTime createdAt) {
+    }
+
+    /** 可接纳返港船只的泊位（空闲、适泊信息一并带出，给靠泊下拉用） */
+    public record ReturnBerthView(
+            Long id,
+            String berthNo,
+            String zoneCode,
+            BigDecimal lengthM,
+            BigDecimal maxDraftM,
+            String allowTypeNames,
+            BigDecimal dailyRate,
+            String status,
+            String statusName) {
+    }
+
+    /** 封航操作日志 */
+    public record ClosureLogView(
+            Long id,
+            String action,
+            String detail,
+            String operator,
+            LocalDateTime createdAt) {
+    }
+
+    /** 封航处置台详情：封航令 + 受影响申报 + 在海船只处置项 + 可接纳泊位 + 日志 */
+    public record ClosureDetailView(
+            ClosureOrderView order,
+            List<AffectedPlanView> affectedPlans,
+            List<DispositionView> dispositions,
+            List<ReturnBerthView> returnBerths,
+            List<ClosureLogView> logs) {
+    }
+
+    /**
+     * 安全靠泊结果。整笔事务成功才返回 data；任何一步失败整笔回退，
+     * changedItems 明确告诉值班员哪些数据被改了，失败时由全局异常文案说明「以下数据均未改变」。
+     */
+    public record SafeBerthResult(
+            Long dispositionId,
+            String dispositionStatus,
+            String dispositionStatusName,
+            Long vesselId,
+            String vesselName,
+            String vesselStatus,
+            String vesselStatusName,
+            Long planId,
+            String planNo,
+            String planStatus,
+            String planStatusName,
+            Long berthingId,
+            String berthingNo,
+            Long berthId,
+            String berthNo,
+            String berthStatus,
+            String berthStatusName,
+            LocalDateTime berthedAt,
+            List<String> changedItems,
+            List<ContactView> contacts) {
     }
 }

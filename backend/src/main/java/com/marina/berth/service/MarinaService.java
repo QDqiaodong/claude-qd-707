@@ -17,6 +17,7 @@ import com.marina.berth.domain.ServiceRecord;
 import com.marina.berth.domain.Vessel;
 import com.marina.berth.dto.Views;
 import com.marina.berth.repository.BerthRepository;
+import com.marina.berth.repository.ClosureOrderRepository;
 import com.marina.berth.repository.SailingPlanRepository;
 import com.marina.berth.repository.ServiceRecordRepository;
 import com.marina.berth.repository.VesselRepository;
@@ -29,15 +30,18 @@ public class MarinaService {
     private final VesselRepository vesselRepository;
     private final SailingPlanRepository planRepository;
     private final ServiceRecordRepository serviceRepository;
+    private final ClosureOrderRepository closureOrderRepository;
 
     public MarinaService(BerthRepository berthRepository,
                          VesselRepository vesselRepository,
                          SailingPlanRepository planRepository,
-                         ServiceRecordRepository serviceRepository) {
+                         ServiceRecordRepository serviceRepository,
+                         ClosureOrderRepository closureOrderRepository) {
         this.berthRepository = berthRepository;
         this.vesselRepository = vesselRepository;
         this.planRepository = planRepository;
         this.serviceRepository = serviceRepository;
+        this.closureOrderRepository = closureOrderRepository;
     }
 
     @Transactional(readOnly = true)
@@ -103,10 +107,14 @@ public class MarinaService {
                 monthAmount = monthAmount.add(item.getAmount() == null ? BigDecimal.ZERO : item.getAmount());
             }
         }
+        // 当前未归档封航令数（顶栏封航指示灯，0 = 通航正常）
+        long closureActive = closureOrderRepository
+                .findAllByStatusNotOrderByCreatedAtDescIdDesc("ARCHIVED").size();
+
         return new Views.Overview(berthTotal, berthFree, berthInPort, berthReserved, berthDisabled,
                 vesselTotal, vesselInPort, vesselAtSea, vesselMaintenance,
                 planPending, planApproved, planOverdue,
                 serviceUnsettled, unsettledAmount.setScale(2, RoundingMode.HALF_UP),
-                monthAmount.setScale(2, RoundingMode.HALF_UP), insuranceWarn);
+                monthAmount.setScale(2, RoundingMode.HALF_UP), insuranceWarn, closureActive);
     }
 }

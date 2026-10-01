@@ -50,8 +50,48 @@ public final class MarinaDict {
     private static final Map<String, String> PLAN_STATUS = Map.of(
             "PENDING", "待审批",
             "APPROVED", "已批准",
+            "SUSPENDED", "暂停放行",
             "RETURNED", "已返航",
             "CANCELED", "已取消");
+
+    // ---------------- 模块六：封航令 ----------------
+    private static final Map<String, String> CLOSURE_STATUS = Map.of(
+            "PENDING", "待生效",
+            "EFFECTIVE", "生效中",
+            "RELEASING", "解除中",
+            "ARCHIVED", "已归档");
+
+    /** 封航令阶段顺序（只许前进） */
+    public static final List<String> CLOSURE_STATUS_ORDER =
+            List.of("PENDING", "EFFECTIVE", "RELEASING", "ARCHIVED");
+
+    private static final Map<String, String> CLOSURE_REASON = Map.of(
+            "TYPHOON", "台风",
+            "MARITIME_CONTROL", "海事管制",
+            "WATER_RISK", "突发水域风险");
+
+    // ---------------- 模块六：返港处置 ----------------
+    private static final Map<String, String> DISPOSITION_STATUS = Map.of(
+            "TO_CONTACT", "待联系",
+            "CONFIRMED_RETURN", "已确认返港",
+            "LOST_CONTACT", "失联升级",
+            "BERTHED", "已安全靠泊");
+
+    /** 风险项状态：归档前必须清零（只剩已安全靠泊） */
+    public static final List<String> DISPOSITION_RISK_STATUS =
+            List.of("TO_CONTACT", "CONFIRMED_RETURN", "LOST_CONTACT");
+
+    private static final Map<String, String> CONTACT_RESULT = Map.of(
+            "CONTACTED", "已联系上",
+            "CONFIRMED_RETURN", "确认返港",
+            "LOST_CONTACT", "失联升级",
+            "REACHED", "重新取得联系",
+            "BERTHED", "已安全靠泊");
+
+    private static final Map<String, String> EFFECT_TYPE = Map.of(
+            "SUSPENDED", "暂停放行",
+            "BLOCKED_NEW", "新建待批受阻",
+            "RESTORED", "恢复可审批");
 
     // ---------------- 码头服务类型 ----------------
     private static final Map<String, String> SERVICE_TYPE = Map.of(
@@ -227,5 +267,48 @@ public final class MarinaDict {
             sb.append(vesselTypeName(code));
         }
         return sb.toString();
+    }
+
+    // ---------------- 模块六：封航 / 返港 取值方法 ----------------
+    public static boolean isValidClosureStatus(String status) {
+        return status != null && CLOSURE_STATUS.containsKey(status);
+    }
+
+    public static String closureStatusName(String status) {
+        return status == null ? "" : CLOSURE_STATUS.getOrDefault(status, status);
+    }
+
+    public static int closureStatusRank(String status) {
+        int index = CLOSURE_STATUS_ORDER.indexOf(status);
+        return index < 0 ? 0 : index + 1;
+    }
+
+    public static boolean isValidClosureReason(String reason) {
+        return reason != null && CLOSURE_REASON.containsKey(reason);
+    }
+
+    public static String closureReasonName(String reason) {
+        return reason == null ? "" : CLOSURE_REASON.getOrDefault(reason, reason);
+    }
+
+    public static boolean isValidDispositionStatus(String status) {
+        return status != null && DISPOSITION_STATUS.containsKey(status);
+    }
+
+    public static String dispositionStatusName(String status) {
+        return status == null ? "" : DISPOSITION_STATUS.getOrDefault(status, status);
+    }
+
+    /** 处置项是否为风险项（归档前必须清零） */
+    public static boolean isRiskDisposition(String status) {
+        return status != null && DISPOSITION_RISK_STATUS.contains(status);
+    }
+
+    public static String contactResultName(String result) {
+        return result == null ? "" : CONTACT_RESULT.getOrDefault(result, result);
+    }
+
+    public static String effectTypeName(String effectType) {
+        return effectType == null ? "" : EFFECT_TYPE.getOrDefault(effectType, effectType);
     }
 }

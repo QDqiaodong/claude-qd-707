@@ -91,8 +91,25 @@ public class BerthingService {
     @Transactional
     public Views.BerthingView arrive(Long berthId, Long vesselId, LocalDateTime berthTime,
                                      LocalDateTime etaDepart, String recordNo) {
-        Berth berth = berthRepository.findById(berthId)
-                .orElseThrow(() -> new BizException("泊位不存在：id=" + berthId));
+        return arrive(berthId, vesselId, berthTime, etaDepart, recordNo, false);
+    }
+
+    /**
+     * 安排靠泊（可选行锁）。
+     *
+     * <p>{@code lockBerth=true} 时用 {@code PESSIMISTIC_WRITE} 先锁泊位行：
+     * 封航返港安全靠泊要在【同一个事务】里连续改 处置项/申报/船只/靠泊记录/泊位，
+     * 两名值班员给不同船选了同一个泊位时，靠唯一键 + 普通 select 只能在撞键后报错回滚，
+     * 行锁让并发事务在这一步排队，后到者拿到锁时泊位已是「在泊」，直接走业务校验失败文案。
+     */
+    @Transactional
+    public Views.BerthingView arrive(Long berthId, Long vesselId, LocalDateTime berthTime,
+                                     LocalDateTime etaDepart, String recordNo, boolean lockBerth) {
+        Berth berth = lockBerth
+                ? berthRepository.findByIdForUpdate(berthId)
+                        .orElseThrow(() -> new BizException("泊位不存在：id=" + berthId))
+                : berthRepository.findById(berthId)
+                        .orElseThrow(() -> new BizException("泊位不存在：id=" + berthId));
         Vessel vessel = vesselRepository.findById(vesselId)
                 .orElseThrow(() -> new BizException("船只不存在：id=" + vesselId));
 

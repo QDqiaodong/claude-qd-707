@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -58,9 +59,22 @@ public class SailingPlan {
     @Column(name = "weather", nullable = false, length = 128)
     private String weather;
 
-    /** PENDING 待审批 / APPROVED 已批准 / RETURNED 已返航 / CANCELED 已取消 */
+    /** PENDING 待审批 / APPROVED 已批准 / SUSPENDED 暂停放行 / RETURNED 已返航 / CANCELED 已取消 */
     @Column(name = "status", nullable = false, length = 16)
     private String status;
+
+    /** 暂停它的封航令 id；解除归档后置空（暂停原因与顺序列保留留痕） */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "hold_by_order_id")
+    private NavigationClosureOrder holdByOrder;
+
+    /** 暂停时的原审批顺序：解除归档后按此顺序恢复为可继续审批 */
+    @Column(name = "hold_seq")
+    private Integer holdSeq;
+
+    /** 暂停原因（封航令编号 + 事由），解除后也保留，可追溯为什么被拦过 */
+    @Column(name = "hold_reason", length = 256)
+    private String holdReason;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;

@@ -20,6 +20,13 @@ export const navItems = [
     hint: '待审批 → 已批准 → 已返航 · 超期未返标红'
   },
   {
+    key: 'closures',
+    path: '/closures',
+    icon: '🌊',
+    label: '封航返港',
+    hint: '封航令四阶段 · 受影响申报 · 在海船只返港处置 · 安全靠泊一笔一致'
+  },
+  {
     key: 'vessels',
     path: '/vessels',
     icon: '⛵',
@@ -39,6 +46,7 @@ const routes = [
   { path: '/', redirect: '/berths' },
   { path: '/berths', name: 'berths', component: () => import('../views/BerthView.vue') },
   { path: '/plans', name: 'plans', component: () => import('../views/SailingPlanView.vue') },
+  { path: '/closures', name: 'closures', component: () => import('../views/ClosureConsoleView.vue') },
   { path: '/vessels', name: 'vessels', component: () => import('../views/VesselView.vue') },
   { path: '/services', name: 'services', component: () => import('../views/ServiceRecordView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/berths' }
