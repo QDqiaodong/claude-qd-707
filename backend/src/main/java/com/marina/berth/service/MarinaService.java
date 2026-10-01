@@ -11,12 +11,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.marina.berth.domain.Berth;
+import com.marina.berth.domain.ClosureOrder;
 import com.marina.berth.domain.MarinaDict;
 import com.marina.berth.domain.SailingPlan;
 import com.marina.berth.domain.ServiceRecord;
 import com.marina.berth.domain.Vessel;
 import com.marina.berth.dto.Views;
 import com.marina.berth.repository.BerthRepository;
+import com.marina.berth.repository.ClosureOrderRepository;
+import com.marina.berth.repository.ReturnDispositionRepository;
 import com.marina.berth.repository.SailingPlanRepository;
 import com.marina.berth.repository.ServiceRecordRepository;
 import com.marina.berth.repository.VesselRepository;
@@ -29,15 +32,21 @@ public class MarinaService {
     private final VesselRepository vesselRepository;
     private final SailingPlanRepository planRepository;
     private final ServiceRecordRepository serviceRepository;
+    private final ClosureOrderRepository closureRepository;
+    private final ReturnDispositionRepository dispRepository;
 
     public MarinaService(BerthRepository berthRepository,
                          VesselRepository vesselRepository,
                          SailingPlanRepository planRepository,
-                         ServiceRecordRepository serviceRepository) {
+                         ServiceRecordRepository serviceRepository,
+                         ClosureOrderRepository closureRepository,
+                         ReturnDispositionRepository dispRepository) {
         this.berthRepository = berthRepository;
         this.vesselRepository = vesselRepository;
         this.planRepository = planRepository;
         this.serviceRepository = serviceRepository;
+        this.closureRepository = closureRepository;
+        this.dispRepository = dispRepository;
     }
 
     @Transactional(readOnly = true)
@@ -79,9 +88,13 @@ public class MarinaService {
         long planPending = 0;
         long planApproved = 0;
         long planOverdue = 0;
+        long planSuspended = 0;
         for (SailingPlan plan : planRepository.findAllByOrderByDepartTimeDesc()) {
             if ("PENDING".equals(plan.getStatus())) {
                 planPending++;
+            }
+            if ("SUSPENDED".equals(plan.getStatus())) {
+                planSuspended++;
             }
             if ("APPROVED".equals(plan.getStatus())) {
                 planApproved++;
@@ -103,9 +116,29 @@ public class MarinaService {
                 monthAmount = monthAmount.add(item.getAmount() == null ? BigDecimal.ZERO : item.getAmount());
             }
         }
+        // 封航：活动令（待生效/生效中/解除中）数、生效中令数、未清零的返港风险项数
+        long closureActive = 0;
+        long closureEffective = 0;
+        for (ClosureOrder c : closureRepository.findAllByOrderByCreatedAtDescIdDesc()) {
+            if ("ARCHIVED".equals(c.getStatus())) {
+                continue;
+            }
+            closureActive++;
+            if ("EFFECTIVE".equals(c.getStatus())) {
+                closureEffective++;
+            }
+        }
+        long dispRiskOpen = 0;
+        for (ClosureOrder c : closureRepository.findAllByOrderByCreatedAtDescIdDesc()) {
+            if ("ARCHIVED".equals(c.getStatus())) {
+                continue;
+            }
+            dispRiskOpen += dispRepository.countRiskOpen(c.getId());
+        }
         return new Views.Overview(berthTotal, berthFree, berthInPort, berthReserved, berthDisabled,
                 vesselTotal, vesselInPort, vesselAtSea, vesselMaintenance,
-                planPending, planApproved, planOverdue,
+                planPending, planApproved, planOverdue, planSuspended,
+                closureActive, closureEffective, dispRiskOpen,
                 serviceUnsettled, unsettledAmount.setScale(2, RoundingMode.HALF_UP),
                 monthAmount.setScale(2, RoundingMode.HALF_UP), insuranceWarn);
     }

@@ -58,9 +58,25 @@ public class SailingPlan {
     @Column(name = "weather", nullable = false, length = 128)
     private String weather;
 
-    /** PENDING 待审批 / APPROVED 已批准 / RETURNED 已返航 / CANCELED 已取消 */
+    /** PENDING 待审批 / APPROVED 已批准 / SUSPENDED 暂停放行 / RETURNED 已返航 / CANCELED 已取消 */
     @Column(name = "status", nullable = false, length = 16)
     private String status;
+
+    /** 批准时间：暂停放行恢复后仍按此时间维持原审批顺序 */
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    /** 暂停放行时间（封航生效时写入） */
+    @Column(name = "suspended_at")
+    private LocalDateTime suspendedAt;
+
+    /** 暂停原因：封航令编号 + 事由，恢复后仍保留可追溯 */
+    @Column(name = "suspended_reason", length = 256)
+    private String suspendedReason;
+
+    /** 恢复为可继续审批的时间 */
+    @Column(name = "resumed_at")
+    private LocalDateTime resumedAt;
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;

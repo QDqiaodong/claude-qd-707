@@ -1,9 +1,25 @@
 <template>
   <div>
+    <el-alert
+      v-if="closureEffective"
+      class="closure-banner"
+      type="error"
+      :closable="false"
+      show-icon
+      title="封航令生效中：新申报可保存为待审批但暂不能批准；已批准未出航的申报已暂停放行，不能直接取消或返航"
+    >
+      <template #default>
+        <div>请在
+          <el-link type="primary" :underline="false" @click="$router.push('/closures')">「封航返港」处置台</el-link>
+          处理；解除封航后暂停申报自动恢复为可继续审批，保留原审批顺序与暂停原因。
+        </div>
+      </template>
+    </el-alert>
+
     <div class="panel">
       <div class="panel-head">
         <h3>出航申报</h3>
-        <span class="panel-sub">待审批 → 已批准 → 已返航 / 已取消；已批准且超过预计返回时间的整行标红</span>
+        <span class="panel-sub">待审批 → 已批准（封航时可暂停放行）→ 已返航 / 已取消；已批准且超过预计返回时间的整行标红</span>
         <div class="panel-extra">
           <el-select v-model="statusFilter" clearable placeholder="全部状态" style="width:130px" @change="load">
             <el-option v-for="s in PLAN_STATUS" :key="s.value" :label="s.label" :value="s.value" />
@@ -18,7 +34,11 @@
         <el-table-column prop="vesselName" label="船只" width="110">
           <template #default="{ row }">
             {{ row.vesselName }}
-            <div class="muted" style="font-size:11px">{{ row.vesselTypeName }} · {{ row.berthNo || '未靠泊' }}</div>
+            <div class="muted" style="font-size:11px">
+              {{ row.vesselTypeName }} ·
+              <template v-if="row.vesselAtSea">在海</template>
+              <template v-else>{{ row.berthNo || '在港未靠泊' }}</template>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="skipper" label="船长/驾驶员" width="110" />
@@ -31,6 +51,19 @@
         <el-table-column prop="statusName" label="状态" width="100">
           <template #default="{ row }">
             <el-tag size="small" :type="statusTag(row.status)">{{ row.statusName }}</el-tag>
+            <div v-if="row.status === 'SUSPENDED'" class="muted" style="font-size:10px;line-height:1.3">
+              {{ fmtTime(row, null, row.suspendedAt) }} 暂停
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="封航暂停原因" min-width="180">
+          <template #default="{ row }">
+            <span v-if="row.suspendedReason" style="color:#b3261e">{{ row.suspendedReason }}</span>
+            <span v-else-if="row.status === 'SUSPENDED'" class="muted">封航暂停放行</span>
+            <span v-else class="muted">—</span>
+            <div v-if="row.resumedAt" class="muted" style="font-size:11px">
+              已于 {{ fmtTime(row, null, row.resumedAt) }} 恢复可继续审批（未自动批准）
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="超期" width="110">
@@ -40,12 +73,19 @@
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'PENDING'" type="primary" size="small" link @click="act(row, 'approve')">审批</el-button>
-            <el-button v-if="row.status === 'APPROVED'" type="success" size="small" link @click="act(row, 'return')">登记返航</el-button>
+            <el-button v-if="row.status === 'PENDING'" type="primary" size="small" link
+                       :disabled="closureEffective"
+                       :title="closureEffective ? '封航生效中，不得批准；申报可保留为待审批' : ''"
+                       @click="act(row, 'approve')">审批</el-button>
+            <el-button v-if="row.status === 'APPROVED' && !row.vesselAtSea" type="warning" size="small" link
+                       @click="act(row, 'depart')">办理出港</el-button>
+            <el-button v-if="row.status === 'APPROVED' && row.vesselAtSea" type="success" size="small" link @click="act(row, 'return')">登记返航</el-button>
             <el-button v-if="row.status === 'PENDING' || row.status === 'APPROVED'" type="danger" size="small" link
                        @click="act(row, 'cancel')">取消</el-button>
+            <el-button v-if="row.status === 'SUSPENDED'" type="warning" size="small" link
+                       @click="$router.push('/closures')">去封航处置</el-button>
             <span v-if="row.status === 'RETURNED' || row.status === 'CANCELED'" class="muted">已结单</span>
           </template>
         </el-table-column>
@@ -83,11 +123,12 @@
 <script setup>
 import { inject, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { planApi, vesselApi } from '../api'
+import { planApi, vesselApi, closureApi } from '../api'
 
 const PLAN_STATUS = [
   { value: 'PENDING', label: '待审批' },
   { value: 'APPROVED', label: '已批准' },
+  { value: 'SUSPENDED', label: '暂停放行' },
   { value: 'RETURNED', label: '已返航' },
   { value: 'CANCELED', label: '已取消' }
 ]
@@ -95,6 +136,7 @@ const PLAN_STATUS = [
 const marina = inject('marina', null)
 const plans = ref([])
 const vessels = ref([])
+const closureEffective = ref(false)
 const statusFilter = ref('')
 const createVisible = ref(false)
 const form = ref({})
@@ -105,7 +147,7 @@ function fmtTime(row, column, value) {
 }
 
 function statusTag(status) {
-  return { PENDING: 'warning', APPROVED: 'primary', RETURNED: 'success', CANCELED: 'info' }[status] || 'info'
+  return { PENDING: 'warning', APPROVED: 'primary', SUSPENDED: 'danger', RETURNED: 'success', CANCELED: 'info' }[status] || 'info'
 }
 
 /** 超期未返：整行标红 */
@@ -114,8 +156,14 @@ function rowClass({ row }) {
 }
 
 async function load() {
-  plans.value = await planApi.list(statusFilter.value ? { status: statusFilter.value } : {})
-  vessels.value = await vesselApi.list()
+  const [list, vlist, active] = await Promise.all([
+    planApi.list(statusFilter.value ? { status: statusFilter.value } : {}),
+    vesselApi.list(),
+    closureApi.active()
+  ])
+  plans.value = list
+  vessels.value = vlist
+  closureEffective.value = !!(active && active.status === 'EFFECTIVE')
 }
 
 function openCreate() {
@@ -135,9 +183,15 @@ async function submit() {
 }
 
 async function act(row, action) {
-  const text = { approve: '批准该申报？船只会放行出海（仍占泊位则先自动结算离泊）', return: '确认该船已返航？', cancel: '取消该申报？' }[action]
+  const text = {
+    approve: '批准该申报？批准是放行许可：船仍在港，到出航时间自动办理出港（也可手动）。',
+    depart: '确认立即办理出港？仍占泊位的将先自动结算离泊，船只转为出海。',
+    return: '确认该船已返航？（封航返港请在「封航返港」处置台登记安全靠泊，以同步泊位）',
+    cancel: '取消该申报？'
+  }[action]
   await ElMessageBox.confirm(text, '出航申报')
   if (action === 'approve') await planApi.approve(row.id)
+  if (action === 'depart') await planApi.depart(row.id)
   if (action === 'return') await planApi.markReturn(row.id)
   if (action === 'cancel') await planApi.cancel(row.id)
   ElMessage.success('已处理')

@@ -164,6 +164,11 @@ public class BerthService {
         if ("IN_PORT".equals(berth.getStatus())) {
             throw new BizException("泊位 " + berth.getBerthNo() + " 上有船在泊，请先办理离泊");
         }
+        // 封航返港预留位不允许在这里手工改状态（避免预留指针与状态不一致）；请到「封航返港」处置台释放
+        if (berth.getReservedReturnId() != null) {
+            throw new BizException("泊位 " + berth.getBerthNo() + " 是封航返港预留泊位，"
+                    + "不能在这里手工改状态，请在「封航返港」处置台释放或安排安全靠泊");
+        }
         berth.setStatus(status);
         berth.setUpdatedAt(LocalDateTime.now());
         return toView(reload(berthId), new HashMap<>());

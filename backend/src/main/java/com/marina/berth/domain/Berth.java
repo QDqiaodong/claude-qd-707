@@ -76,6 +76,10 @@ public class Berth {
     @Column(name = "status", nullable = false, length = 16)
     private String status;
 
+    /** 为哪条封航令预留的返港泊位（RESERVED 时非空，靠泊/释放时清空） */
+    @Column(name = "reserved_return_id")
+    private Long reservedReturnId;
+
     /**
      * 【@JoinFormula 派生关联】当前在泊船只：取该泊位最新一条「在泊」靠泊记录的船只。
      * 只读派生列，库表里没有对应字段。

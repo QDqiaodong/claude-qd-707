@@ -377,3 +377,9 @@ body {
   font-size: 15px;
   color: var(--mb-text);
 }
+
+/* ---------- 封航横幅 ---------- */
+.closure-banner {
+  margin-bottom: 14px;
+  border-radius: 8px;
+}

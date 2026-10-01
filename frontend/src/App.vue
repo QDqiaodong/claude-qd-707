@@ -19,6 +19,15 @@
         <div class="stat-chip"><b>{{ overview.vesselInPort || 0 }}</b><span>在港船</span></div>
         <div class="stat-chip"><b>{{ overview.vesselAtSea || 0 }}</b><span>出海中</span></div>
         <div class="stat-chip"><b>{{ overview.planPending || 0 }}</b><span>待审批</span></div>
+        <div class="stat-chip" :class="{ 'is-alert': (overview.planSuspended || 0) > 0 }">
+          <b>{{ overview.planSuspended || 0 }}</b><span>暂停放行</span>
+        </div>
+        <div class="stat-chip" :class="{ 'is-alert': (overview.closureEffective || 0) > 0 }">
+          <b>{{ overview.closureActive || 0 }}</b><span>封航令</span>
+        </div>
+        <div class="stat-chip" :class="{ 'is-alert': (overview.dispRiskOpen || 0) > 0 }">
+          <b>{{ overview.dispRiskOpen || 0 }}</b><span>返港风险</span>
+        </div>
         <div class="stat-chip" :class="{ 'is-alert': (overview.planOverdue || 0) > 0 }">
           <b>{{ overview.planOverdue || 0 }}</b><span>超期未返</span>
         </div>

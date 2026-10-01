@@ -47,7 +47,13 @@ public class SailingPlanController {
 
     @PostMapping("/{id}/approve")
     public ApiResponse<Views.SailingPlanView> approve(@PathVariable("id") Long id) {
-        return ApiResponse.success("申报已批准，船只放行出海", planService.approve(id));
+        return ApiResponse.success("申报已批准（放行许可），船仍在港；到出航时间自动办理出港", planService.approve(id));
+    }
+
+    /** 办理实际出港（一般由到点自动处理，也可值班员手动）：结算离泊、船只转出海 */
+    @PostMapping("/{id}/depart")
+    public ApiResponse<Views.SailingPlanView> depart(@PathVariable("id") Long id) {
+        return ApiResponse.success("已办理出港，船只放行出海", planService.depart(id));
     }
 
     @PostMapping("/{id}/return")

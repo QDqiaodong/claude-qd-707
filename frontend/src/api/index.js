@@ -63,6 +63,7 @@ export const planApi = {
   nextNo: () => http.get('/sailing-plans/next-no'),
   create: (data) => http.post('/sailing-plans', data),
   approve: (id) => http.post(`/sailing-plans/${id}/approve`),
+  depart: (id) => http.post(`/sailing-plans/${id}/depart`),
   markReturn: (id) => http.post(`/sailing-plans/${id}/return`),
   cancel: (id) => http.post(`/sailing-plans/${id}/cancel`)
 }
@@ -73,4 +74,24 @@ export const serviceApi = {
   summary: () => http.get('/service-records/summary'),
   create: (data) => http.post('/service-records', data),
   settle: (id, settleStatus) => http.post(`/service-records/${id}/settle`, { settleStatus })
+}
+
+/** 模块六/七：封航令与返港处置台 */
+export const closureApi = {
+  list: (status) => http.get('/closures', { params: status ? { status } : {} }),
+  active: () => http.get('/closures/active'),
+  detail: (id) => http.get(`/closures/${id}`),
+  affectedPlans: (id) => http.get(`/closures/${id}/affected-plans`),
+  dispositions: (id, status) => http.get(`/closures/${id}/dispositions`, { params: status ? { status } : {} }),
+  create: (data) => http.post('/closures', data),
+  activate: (id, operator) => http.post(`/closures/${id}/activate`, { operator }),
+  lift: (id, operator) => http.post(`/closures/${id}/lift`, { operator }),
+  archive: (id, operator) => http.post(`/closures/${id}/archive`, { operator }),
+  dispDetail: (dispId) => http.get(`/dispositions/${dispId}`),
+  candidateBerths: (dispId) => http.get(`/dispositions/${dispId}/candidate-berths`),
+  addContact: (dispId, data) => http.post(`/dispositions/${dispId}/contacts`, data),
+  escalate: (dispId, data) => http.post(`/dispositions/${dispId}/escalate`, data),
+  assignBerth: (dispId, data) => http.post(`/dispositions/${dispId}/assign-berth`, data),
+  releaseBerth: (dispId, operator) => http.post(`/dispositions/${dispId}/release-berth`, { operator }),
+  safeBerth: (dispId, data) => http.post(`/dispositions/${dispId}/safe-berth`, data)
 }

@@ -50,8 +50,51 @@ public final class MarinaDict {
     private static final Map<String, String> PLAN_STATUS = Map.of(
             "PENDING", "待审批",
             "APPROVED", "已批准",
+            "SUSPENDED", "暂停放行",
             "RETURNED", "已返航",
             "CANCELED", "已取消");
+
+    // ---------------- 封航令阶段 ----------------
+    private static final Map<String, String> CLOSURE_STATUS = Map.of(
+            "SCHEDULED", "待生效",
+            "EFFECTIVE", "生效中",
+            "LIFTING", "解除中",
+            "ARCHIVED", "已归档");
+
+    /** 封航阶段顺序（前端筛选 / 时间线用） */
+    public static final List<String> CLOSURE_STATUS_ORDER =
+            List.of("SCHEDULED", "EFFECTIVE", "LIFTING", "ARCHIVED");
+
+    // ---------------- 封航事由 ----------------
+    private static final Map<String, String> CLOSURE_REASON = Map.of(
+            "TYPHOON", "台风",
+            "MARITIME_CONTROL", "海事管制",
+            "WATER_RISK", "突发水域风险",
+            "OTHER", "其他");
+
+    /** 封航事由顺序（前端下拉用） */
+    public static final List<String> CLOSURE_REASON_ORDER =
+            List.of("TYPHOON", "MARITIME_CONTROL", "WATER_RISK", "OTHER");
+
+    // ---------------- 返港处置状态 ----------------
+    private static final Map<String, String> DISP_STATUS = Map.of(
+            "TO_CONTACT", "待联系",
+            "CONFIRMED_RETURN", "已确认返港",
+            "ESCALATED", "失联升级",
+            "SAFE_BERTHED", "已安全靠泊");
+
+    /** 返港处置状态顺序（前端筛选 / 统计用） */
+    public static final List<String> DISP_STATUS_ORDER =
+            List.of("TO_CONTACT", "CONFIRMED_RETURN", "ESCALATED", "SAFE_BERTHED");
+
+    // ---------------- 联系结果 ----------------
+    private static final Map<String, String> CONTACT_RESULT = Map.of(
+            "NOTIFIED", "已通知返港",
+            "ACK", "确认返港",
+            "NO_ANSWER", "无人应答",
+            "ESCALATE", "失联上报",
+            "SAFE", "安全靠泊",
+            "OTHER", "其他情况");
 
     // ---------------- 码头服务类型 ----------------
     private static final Map<String, String> SERVICE_TYPE = Map.of(
@@ -159,6 +202,30 @@ public final class MarinaDict {
 
     public static String planStatusName(String status) {
         return status == null ? "" : PLAN_STATUS.getOrDefault(status, status);
+    }
+
+    public static String closureStatusName(String status) {
+        return status == null ? "" : CLOSURE_STATUS.getOrDefault(status, status);
+    }
+
+    public static String closureReasonName(String reason) {
+        return reason == null ? "" : CLOSURE_REASON.getOrDefault(reason, reason);
+    }
+
+    public static boolean isValidClosureReason(String reason) {
+        return reason != null && CLOSURE_REASON.containsKey(reason);
+    }
+
+    public static String dispStatusName(String status) {
+        return status == null ? "" : DISP_STATUS.getOrDefault(status, status);
+    }
+
+    public static String contactResultName(String result) {
+        return result == null ? "" : CONTACT_RESULT.getOrDefault(result, result);
+    }
+
+    public static boolean isValidContactResult(String result) {
+        return result != null && CONTACT_RESULT.containsKey(result);
     }
 
     public static boolean isValidServiceType(String type) {

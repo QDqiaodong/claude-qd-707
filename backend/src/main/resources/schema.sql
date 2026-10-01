@@ -133,6 +133,116 @@ CREATE TABLE service_record (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='码头服务与费用';
 
 -- ============================================================================
+-- 模块六：封航令 closure_order
+--   四阶段：SCHEDULED 待生效 → EFFECTIVE 生效中 → LIFTING 解除中 → ARCHIVED 已归档
+--   生效时由系统在同一事务内快照：暂停已批准未出航申报、为每条在海船建返港处置项。
+-- ============================================================================
+CREATE TABLE closure_order (
+  id                  BIGINT       NOT NULL AUTO_INCREMENT,
+  order_no            VARCHAR(24)  NOT NULL COMMENT '封航令编号 FH-yyyyMM-####',
+  reason_type         VARCHAR(16)  NOT NULL COMMENT 'TYPHOON 台风/MARITIME_CONTROL 海事管制/WATER_RISK 突发水域风险/OTHER 其他',
+  reason_detail       VARCHAR(256) NULL     COMMENT '事由说明',
+  effective_at        DATETIME     NOT NULL COMMENT '发布生效时间（到点自动生效）',
+  status              VARCHAR(16)  NOT NULL COMMENT 'SCHEDULED 待生效/EFFECTIVE 生效中/LIFTING 解除中/ARCHIVED 已归档',
+  issued_by           VARCHAR(32)  NULL     COMMENT '发布值班主管',
+  created_at          DATETIME     NOT NULL,
+  activated_at        DATETIME     NULL     COMMENT '实际生效时间',
+  lifting_started_at  DATETIME     NULL     COMMENT '进入解除中的时间',
+  lifted_by           VARCHAR(32)  NULL     COMMENT '发起解除的值班员',
+  archived_at         DATETIME     NULL     COMMENT '归档时间',
+  archived_by         VARCHAR(32)  NULL     COMMENT '归档值班员',
+  updated_at          DATETIME     NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_closure_no (order_no),
+  KEY idx_closure_status (status),
+  KEY idx_closure_effective (effective_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='封航令';
+
+-- ============================================================================
+-- 模块七：返港处置项 return_disposition
+--   TO_CONTACT 待联系 → CONFIRMED_RETURN 已确认返港 / ESCALATED 失联升级
+--   → SAFE_BERTHED 已安全靠泊（终态）
+--   同一艘船在同一条封航令下只能有一条（uk 兜底并发）。
+-- ============================================================================
+CREATE TABLE return_disposition (
+  id                BIGINT       NOT NULL AUTO_INCREMENT,
+  closure_id        BIGINT       NOT NULL,
+  vessel_id         BIGINT       NOT NULL,
+  sailing_plan_id   BIGINT       NULL     COMMENT '封航前出海对应的已批准申报（可空）',
+  status            VARCHAR(20)  NOT NULL COMMENT 'TO_CONTACT/CONFIRMED_RETURN/ESCALATED/SAFE_BERTHED',
+  assigned_berth_id BIGINT       NULL     COMMENT '预先接纳返港的预留泊位',
+  assigned_at       DATETIME     NULL,
+  assigned_by       VARCHAR(32)  NULL,
+  confirmed_at      DATETIME     NULL,
+  escalated_at      DATETIME     NULL,
+  escalate_reason   VARCHAR(256) NULL,
+  berthed_at        DATETIME     NULL,
+  berthed_berth_id  BIGINT       NULL     COMMENT '实际安全靠泊的泊位',
+  berthed_by        VARCHAR(32)  NULL,
+  berthing_id       BIGINT       NULL     COMMENT '安全靠泊时生成的在泊靠泊记录',
+  created_at        DATETIME     NOT NULL,
+  updated_at        DATETIME     NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_disp_closure_vessel (closure_id, vessel_id),
+  KEY idx_disp_status (status),
+  KEY idx_disp_vessel (vessel_id),
+  KEY idx_disp_berth (assigned_berth_id),
+  CONSTRAINT fk_disp_closure FOREIGN KEY (closure_id) REFERENCES closure_order (id),
+  CONSTRAINT fk_disp_vessel FOREIGN KEY (vessel_id) REFERENCES vessel (id),
+  CONSTRAINT fk_disp_plan FOREIGN KEY (sailing_plan_id) REFERENCES sailing_plan (id),
+  CONSTRAINT fk_disp_assigned_berth FOREIGN KEY (assigned_berth_id) REFERENCES berth (id),
+  CONSTRAINT fk_disp_berthed_berth FOREIGN KEY (berthed_berth_id) REFERENCES berth (id),
+  CONSTRAINT fk_disp_berthing FOREIGN KEY (berthing_id) REFERENCES berthing (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='返港处置项';
+
+-- ---------------------------- 返港处置联系记录（每次联系留痕，可追溯） ----------------------------
+CREATE TABLE disposition_contact (
+  id             BIGINT       NOT NULL AUTO_INCREMENT,
+  disposition_id BIGINT       NOT NULL,
+  contact_at     DATETIME     NOT NULL COMMENT '联系时间',
+  result_code    VARCHAR(16)  NOT NULL COMMENT 'NOTIFIED 已通知/ACK 确认返港/NO_ANSWER 无人应答/ESCALATE 失联上报/SAFE 安全靠泊/OTHER 其他',
+  result_text    VARCHAR(128) NULL     COMMENT '联系结果描述',
+  remark         VARCHAR(256) NULL     COMMENT '备注',
+  operator       VARCHAR(32)  NULL     COMMENT '联系值班员',
+  request_id     VARCHAR(64)  NULL     COMMENT '幂等键：前端重复点击/超时重试同一请求只落一条',
+  created_at     DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_contact_request (request_id),
+  KEY idx_contact_disp (disposition_id),
+  CONSTRAINT fk_contact_disp FOREIGN KEY (disposition_id) REFERENCES return_disposition (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='返港处置联系记录';
+
+-- ---------------------------- 申报暂停/恢复审计日志（保留暂停原因与原审批顺序） ----------------------------
+CREATE TABLE plan_suspend_log (
+  id         BIGINT       NOT NULL AUTO_INCREMENT,
+  closure_id BIGINT       NOT NULL,
+  plan_id    BIGINT       NOT NULL,
+  action     VARCHAR(16)  NOT NULL COMMENT 'SUSPEND 暂停放行 / RESUME 恢复可审批',
+  reason     VARCHAR(256) NULL,
+  operator   VARCHAR(32)  NULL,
+  created_at DATETIME     NOT NULL,
+  PRIMARY KEY (id),
+  KEY idx_suspendlog_closure (closure_id),
+  KEY idx_suspendlog_plan (plan_id),
+  CONSTRAINT fk_suspendlog_closure FOREIGN KEY (closure_id) REFERENCES closure_order (id),
+  CONSTRAINT fk_suspendlog_plan FOREIGN KEY (plan_id) REFERENCES sailing_plan (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='申报暂停放行审计日志';
+
+-- ---------------------------- 既有表补列 ----------------------------
+-- 出航申报：暂停放行状态机与原审批顺序所需列
+ALTER TABLE sailing_plan
+  ADD COLUMN approved_at     DATETIME     NULL COMMENT '批准时间（暂停恢复后仍按此排序）' AFTER status,
+  ADD COLUMN suspended_at    DATETIME     NULL COMMENT '暂停放行时间' AFTER approved_at,
+  ADD COLUMN suspended_reason VARCHAR(256) NULL COMMENT '暂停原因（封航令编号+事由）' AFTER suspended_at,
+  ADD COLUMN resumed_at      DATETIME     NULL COMMENT '恢复可审批时间' AFTER suspended_reason;
+
+-- 出航申报增加 SUSPENDED 暂停放行（不改原有四值语义）
+-- 泊位：返港预留泊位反向指向封航令（RESERVED 状态时占用，靠泊/释放时清空）
+ALTER TABLE berth
+  ADD COLUMN reserved_return_id BIGINT NULL COMMENT '为哪条封航令预留的返港泊位' AFTER status,
+  ADD CONSTRAINT fk_berth_reserved_closure FOREIGN KEY (reserved_return_id) REFERENCES closure_order (id);
+
+-- ============================================================================
 -- 种子数据：泊位 24 个（A/B/C 区各 8 个，A 区小船位、B 区中泊位、C 区大泊位）
 -- id 1~8 = A-01~A-08，9~16 = B-01~B-08，17~24 = C-01~C-08
 -- ============================================================================
@@ -228,6 +338,9 @@ INSERT INTO sailing_plan (id, plan_no, vessel_id, skipper, phone, depart_time, e
  (10, 'SP-2026-0010',  3, '周国平', '13905510003', DATE_SUB(NOW(), INTERVAL  9 DAY), DATE_SUB(NOW(), INTERVAL  8 DAY), '青洲钓场 — 夜钓',          4, '北风 3 级，浪高 0.5m，夜间降温',     'RETURNED', NOW()),
  (11, 'SP-2026-0011', 12, '高翔',   '13905510012', DATE_SUB(NOW(), INTERVAL  3 DAY), DATE_SUB(NOW(), INTERVAL  2 DAY), '东澳岛 — 南沙湾',          3, '东北风 6 级，浪高 2.0m，不适航',     'CANCELED', NOW()),
  (12, 'SP-2026-0012',  1, '陈志远', '13905510001', DATE_SUB(NOW(), INTERVAL 12 DAY), DATE_SUB(NOW(), INTERVAL 11 DAY), '桂山岛 — 环岛',            4, '东南风 2 级，浪高 0.4m，海况优',     'RETURNED', NOW());
+
+-- 已批准的申报回填批准时间（封航暂停恢复后仍按原审批顺序审批）
+UPDATE sailing_plan SET approved_at = updated_at WHERE status = 'APPROVED';
 
 -- ============================================================================
 -- 种子数据：码头服务与费用 16 条（未结 5 / 已结 9 / 挂账 2，横跨近 45 天）

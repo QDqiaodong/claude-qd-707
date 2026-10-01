@@ -109,6 +109,11 @@ public final class Views {
             String status,
             String statusName,
             Long overdueHours,
+            Boolean vesselAtSea,
+            LocalDateTime approvedAt,
+            LocalDateTime suspendedAt,
+            String suspendedReason,
+            LocalDateTime resumedAt,
             LocalDateTime updatedAt) {
     }
 
@@ -150,6 +155,113 @@ public final class Views {
             List<TypeSum> byType) {
     }
 
+    /** 封航令列表项（带处置项计数，值班主管一眼看到风险面） */
+    public record ClosureView(
+            Long id,
+            String orderNo,
+            String reasonType,
+            String reasonTypeName,
+            String reasonDetail,
+            LocalDateTime effectiveAt,
+            String status,
+            String statusName,
+            String issuedBy,
+            LocalDateTime createdAt,
+            LocalDateTime activatedAt,
+            LocalDateTime liftingStartedAt,
+            String liftedBy,
+            LocalDateTime archivedAt,
+            String archivedBy,
+            LocalDateTime updatedAt,
+            Long dispTotal,
+            Long dispToContact,
+            Long dispConfirmed,
+            Long dispEscalated,
+            Long dispBerthed,
+            Long suspendedPlanCount,
+            LocalDateTime now) {
+    }
+
+    /** 受影响的出航申报（封航详情里：待审批 + 暂停放行两类同处可见） */
+    public record AffectedPlanView(
+            Long id,
+            String planNo,
+            Long vesselId,
+            String vesselName,
+            String vesselTypeName,
+            String skipper,
+            String phone,
+            LocalDateTime departTime,
+            LocalDateTime etaReturn,
+            String route,
+            Integer crewCount,
+            String status,
+            String statusName,
+            LocalDateTime approvedAt,
+            LocalDateTime suspendedAt,
+            String suspendedReason,
+            LocalDateTime resumedAt,
+            String groupTag) {
+    }
+
+    /** 返港处置项 */
+    public record DispositionView(
+            Long id,
+            Long closureId,
+            String closureNo,
+            Long vesselId,
+            String vesselName,
+            String vesselTypeName,
+            Long sailingPlanId,
+            String planNo,
+            String skipper,
+            String phone,
+            LocalDateTime etaReturn,
+            String status,
+            String statusName,
+            Long assignedBerthId,
+            String assignedBerthNo,
+            LocalDateTime assignedAt,
+            String assignedBy,
+            LocalDateTime confirmedAt,
+            LocalDateTime escalatedAt,
+            String escalateReason,
+            LocalDateTime berthedAt,
+            Long berthedBerthId,
+            String berthedBerthNo,
+            Long berthingId,
+            String berthingNo,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt,
+            List<ContactView> contacts,
+            Boolean fitAssignedBerth) {
+    }
+
+    /** 一次联系留痕 */
+    public record ContactView(
+            Long id,
+            LocalDateTime contactAt,
+            String resultCode,
+            String resultName,
+            String resultText,
+            String remark,
+            String operator,
+            String requestId,
+            LocalDateTime createdAt) {
+    }
+
+    /** 可接纳返港的泊位（适泊校验后的候选项） */
+    public record BerthOptionView(
+            Long id,
+            String berthNo,
+            String zoneCode,
+            java.math.BigDecimal lengthM,
+            java.math.BigDecimal maxDraftM,
+            String allowTypeNames,
+            java.math.BigDecimal dailyRate,
+            String status) {
+    }
+
     /** 码头总览计数器 */
     public record Overview(
             Long berthTotal,
@@ -164,6 +276,10 @@ public final class Views {
             Long planPending,
             Long planApproved,
             Long planOverdue,
+            Long planSuspended,
+            Long closureActive,
+            Long closureEffective,
+            Long dispRiskOpen,
             Long serviceUnsettled,
             BigDecimal serviceUnsettledAmount,
             BigDecimal monthServiceAmount,
